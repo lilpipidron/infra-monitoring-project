@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  scripts:
+    name: Bash scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make scripts executable
+        run: chmod +x check_api.sh analyze_logs.sh
+
+      - name: Syntax check
+        run: |
+          bash -n check_api.sh
+          bash -n analyze_logs.sh
+
+      - name: Test check_api.sh (expect exit 0)
+        run: ./check_api.sh https://httpbin.org/status/200
+
+      - name: Test check_api.sh with bad URL (expect exit 1)
+        run: |
+          if ./check_api.sh https://httpbin.org/status/404; then
+            echo "Ожидался код возврата 1"; exit 1
+          fi
+
+      - name: Run analyze_logs.sh
+        run: ./analyze_logs.sh 300
+
+  compose:
+    name: Docker Compose smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate compose file
+        run: docker compose config -q
+
+      - name: Up and curl proxy
+        run: |
+          docker compose up -d
+          sleep 3
+          docker compose ps
+          curl -sf http://localhost:80 | grep "Monitoring Service Active"
+
+      - name: Down
+        if: always()
+        run: docker compose down
